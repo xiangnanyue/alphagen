@@ -49,8 +49,7 @@ class StockData:
         import os
         import qlib
         from qlib.config import REG_CN
-        qlib_init_path = os.getenv("QLIB_INIT_PATH", "/home/suyuexn/.qlib/qlib_data/cn_data_arb_hourly")
-        #qlib.init(provider_uri="/home/suzhaoyp/.qlib/qlib_data/cn_data_wind_all", region=REG_CN)
+        qlib_init_path = os.getenv("QLIB_INIT_PATH", "~/.qlib/qlib_data/cn_data_arb_hourly")
         qlib.init(provider_uri=qlib_init_path, region=REG_CN)
         cls._qlib_initialized = True
 

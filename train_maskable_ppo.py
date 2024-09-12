@@ -17,6 +17,22 @@ from alphagen.utils.random import reseed_everything
 from alphagen.rl.env.core import AlphaEnvCore
 from alphagen_qlib.calculator import QLibStockDataCalculator
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
+ALPHA_SAVE_PATH = os.getenv("SAVE_PATH", "/path/for/checkpoints")
+TB_LOG_PATH = os.getenv("TB_LOG_PATH", "/path/for/tb/log")
+MAX_BACKTRACK_DAYS = int(os.getenv("MAX_BACKTRACK_DAYS", 60))
+MAX_FUTURE_DAYS = int(os.getenv("MAX_FUTURE_DAYS", 20))
+
+TRAIN_START = os.getenv("TRAIN_START", '2024-04-10 00:00:00')
+TRAIN_END = os.getenv("TRAIN_END", '2024-08-01 04:00:00')
+VALID_START = os.getenv("VALID_START", '2024-08-01 05:00:00')
+VALID_END = os.getenv("VALID_END", '2024-08-05 04:00:00')
+TEST_START = os.getenv("TEST_START", '2024-08-05 05:00:00')
+TEST_END = os.getenv("TEST_END", '2024-08-12 10:00:00')
+
 
 class CustomCallback(BaseCallback):
     def __init__(self,
@@ -93,24 +109,37 @@ def main(
     seed: int = 0,
     instruments: str = "csi300",
     pool_capacity: int = 10,
-    steps: int = 200_000
+    steps: int = 200_000,
+    freq: str = 'day',
+    pred_len: int = 20,
+    max_backtrack_days: int = MAX_BACKTRACK_DAYS,
+    max_future_days: int = MAX_FUTURE_DAYS
 ):
     reseed_everything(seed)
 
     device = torch.device('cuda:0')
     close = Feature(FeatureType.CLOSE)
-    target = Ref(close, -20) / close - 1
+    target = Ref(close, -pred_len) / close - 1
 
     # You can re-implement AlphaCalculator instead of using QLibStockDataCalculator.
     data_train = StockData(instrument=instruments,
-                           start_time='2010-01-01',
-                           end_time='2019-12-31')
+                           start_time=TRAIN_START,
+                           end_time=TRAIN_END,
+                           max_backtrack_days=max_backtrack_days,
+                           max_future_days=max_future_days,
+                           freq=freq)
     data_valid = StockData(instrument=instruments,
-                           start_time='2020-01-01',
-                           end_time='2020-12-31')
+                           start_time=VALID_START,
+                           end_time=VALID_END,
+                           max_backtrack_days=max_backtrack_days,
+                           max_future_days=max_future_days,
+                           freq=freq)
     data_test = StockData(instrument=instruments,
-                          start_time='2021-01-01',
-                          end_time='2022-12-31')
+                          start_time=TEST_START,
+                          end_time=TEST_END,
+                          max_backtrack_days=max_backtrack_days,
+                          max_future_days=max_future_days,
+                          freq=freq)
     calculator_train = QLibStockDataCalculator(data_train, target)
     calculator_valid = QLibStockDataCalculator(data_valid, target)
     calculator_test = QLibStockDataCalculator(data_test, target)
@@ -129,7 +158,7 @@ def main(
     checkpoint_callback = CustomCallback(
         save_freq=10000,
         show_freq=10000,
-        save_path='/path/for/checkpoints',
+        save_path=ALPHA_SAVE_PATH,
         valid_calculator=calculator_valid,
         test_calculator=calculator_test,
         name_prefix=name_prefix,
@@ -152,7 +181,7 @@ def main(
         gamma=1.,
         ent_coef=0.01,
         batch_size=128,
-        tensorboard_log='/path/for/tb/log',
+        tensorboard_log=TB_LOG_PATH,
         device=device,
         verbose=1,
     )
@@ -167,7 +196,9 @@ def fire_helper(
     seed: Union[int, Tuple[int]],
     code: str,
     pool: int,
-    step: int = None
+    step: int = None,
+    freq: str = 'day',
+    pred_len: int = 20
 ):
     if isinstance(seed, int):
         seed = (seed, )
@@ -181,8 +212,10 @@ def fire_helper(
         main(_seed,
              code,
              pool,
-             default_steps[int(pool)] if step is None else int(step)
-             )
+             default_steps[int(pool)] if step is None else int(step),
+             freq,
+             pred_len
+            )
 
 
 if __name__ == '__main__':

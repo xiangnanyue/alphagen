@@ -4,6 +4,10 @@ import numpy as np
 import pandas as pd
 import torch
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 
 class FeatureType(IntEnum):
     OPEN = 0
@@ -24,7 +28,8 @@ class StockData:
                  max_backtrack_days: int = 100,
                  max_future_days: int = 30,
                  features: Optional[List[FeatureType]] = None,
-                 device: torch.device = torch.device('cuda:0')) -> None:
+                 device: torch.device = torch.device('cuda:0'),
+                 freq: str = 'day') -> None:
         self._init_qlib()
 
         self._instrument = instrument
@@ -33,6 +38,7 @@ class StockData:
         self._start_time = start_time
         self._end_time = end_time
         self._features = features if features is not None else list(FeatureType)
+        self.freq = freq
         self.device = device
         self.data, self._dates, self._stock_ids = self._get_data()
 
@@ -40,9 +46,12 @@ class StockData:
     def _init_qlib(cls) -> None:
         if cls._qlib_initialized:
             return
+        import os
         import qlib
         from qlib.config import REG_CN
-        qlib.init(provider_uri="~/.qlib/qlib_data/cn_data_rolling", region=REG_CN)
+        qlib_init_path = os.getenv("QLIB_INIT_PATH", "/home/suyuexn/.qlib/qlib_data/cn_data_arb_hourly")
+        #qlib.init(provider_uri="/home/suzhaoyp/.qlib/qlib_data/cn_data_wind_all", region=REG_CN)
+        qlib.init(provider_uri=qlib_init_path, region=REG_CN)
         cls._qlib_initialized = True
 
     def _load_exprs(self, exprs: Union[str, List[str]]) -> pd.DataFrame:
@@ -52,14 +61,14 @@ class StockData:
         from qlib.data import D
         if not isinstance(exprs, list):
             exprs = [exprs]
-        cal: np.ndarray = D.calendar()
+        cal: np.ndarray = D.calendar(freq=self.freq)
         start_index = cal.searchsorted(pd.Timestamp(self._start_time))  # type: ignore
         end_index = cal.searchsorted(pd.Timestamp(self._end_time))  # type: ignore
         real_start_time = cal[start_index - self.max_backtrack_days]
         if cal[end_index] != pd.Timestamp(self._end_time):
             end_index -= 1
         real_end_time = cal[end_index + self.max_future_days]
-        return (QlibDataLoader(config=exprs)  # type: ignore
+        return (QlibDataLoader(config=exprs, freq=self.freq)  # type: ignore
                 .load(self._instrument, real_start_time, real_end_time))
 
     def _get_data(self) -> Tuple[torch.Tensor, pd.Index, pd.Index]:
